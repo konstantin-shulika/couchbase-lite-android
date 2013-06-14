@@ -246,19 +246,20 @@ public class CBLPuller extends CBLReplicator implements CBLChangeTrackerClient {
         // Construct a query. We want the revision history, and the bodies of attachments that have
         // been added since the latest revisions we have locally.
         // See: http://wiki.apache.org/couchdb/HTTP_Document_API#Getting_Attachments_With_a_Document
-        StringBuilder path = new StringBuilder("/" + URLEncoder.encode(rev.getDocId()) + "?rev=" + URLEncoder.encode(rev.getRevId()) + "&revs=true&attachments=true");
+        StringBuilder path = new StringBuilder("/" + URLEncoder.encode(rev.getDocId()) + "?rev=" + URLEncoder.encode(rev.getRevId()) + "&revs=true");
         List<String> knownRevs = knownCurrentRevIDs(rev);
-        if(knownRevs == null) {
+        /*if(knownRevs == null) {
             //this means something is wrong, possibly the replicator has shut down
             asyncTaskFinished(1);
             --httpConnectionCount;
             return;
-        }
+        }*/
+/*
         if(knownRevs.size() > 0) {
             path.append("&atts_since=");
             path.append(joinQuotedEscaped(knownRevs));
         }
-
+*/
         //create a final version of this variable for the log statement inside
         //FIXME find a way to avoid this
         final String pathInside = path.toString();

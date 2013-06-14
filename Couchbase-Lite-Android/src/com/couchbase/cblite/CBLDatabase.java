@@ -1340,23 +1340,27 @@ public class CBLDatabase extends Observable {
     /*** CBLDatabase+Attachments                                                                    ***/
     /*************************************************************************************************/
 
-    public CBLStatus insertAttachmentForSequenceWithNameAndType(InputStream contentStream, long sequence, String name, String contentType, int revpos) {
+    public CBLStatus insertAttachmentForSequenceWithNameAndType(InputStream contentStream, long sequence, String name, Map<String,Object> attachment, int revpos) {
         assert(sequence > 0);
+
+        String contentType = (String)attachment.get("content_type");
         assert(name != null);
 
         CBLBlobKey key = new CBLBlobKey();
-        if(!attachments.storeBlobStream(contentStream, key)) {
+        if(contentStream != null && !attachments.storeBlobStream(contentStream, key)) {
             return new CBLStatus(CBLStatus.INTERNAL_SERVER_ERROR);
         }
 
-        byte[] keyData = key.getBytes();
+        //byte[] keyData = key.getBytes();
+        byte[] keyData = ((String)attachment.get("digest")).getBytes();
+
         try {
             ContentValues args = new ContentValues();
             args.put("sequence", sequence);
             args.put("filename", name);
             args.put("key", keyData);
             args.put("type", contentType);
-            args.put("length", attachments.getSizeOfBlob(key));
+            args.put("length", Integer.toString((Integer)attachment.get("length")));
             args.put("revpos", revpos);
             database.insert("attachments", null, args);
             return new CBLStatus(CBLStatus.CREATED);
@@ -1578,7 +1582,7 @@ public class CBLDatabase extends Observable {
             CBLStatus status = new CBLStatus();
             Map<String,Object> newAttach = (Map<String,Object>)newAttachments.get(name);
             String newContentBase64 = (String)newAttach.get("data");
-            if(newContentBase64 != null) {
+            /*if(newContentBase64 != null) {
                 // New item contains data, so insert it. First decode the data:
                 byte[] newContents;
                 try {
@@ -1612,7 +1616,50 @@ public class CBLDatabase extends Observable {
                 // It's just a stub, so copy the previous revision's attachment entry:
                 //? Should I enforce that the type and digest (if any) match?
                 status = copyAttachmentNamedFromSequenceToSequence(name, parentSequence, newSequence);
+            }*/
+
+
+            // New item contains data, so insert it. First decode the data:
+            byte[] newContents = null;
+            ByteArrayInputStream stream = null;
+
+            if(newContentBase64 == null) {
+                // It's just a stub, so copy the previous revision's attachment entry:
+                status = copyAttachmentNamedFromSequenceToSequence(name, parentSequence, newSequence);
+                if (status.isSuccessful()) {
+                    continue;
+                }
+            } else {
+                try {
+                    newContents = Base64.decode(newContentBase64);
+                } catch (IOException e) {
+                    Log.e(CBLDatabase.TAG, "IOExeption parsing base64", e);
+                    return new CBLStatus(CBLStatus.BAD_REQUEST);
+                }
+                if(newContents == null) {
+                    return new CBLStatus(CBLStatus.BAD_REQUEST);
+                }
+
+                stream = new ByteArrayInputStream(newContents);
             }
+
+            // Now determine the revpos, i.e. generation # this was added in. Usually this is
+            // implicit, but a rev being pulled in replication will have it set already.
+            int generation = rev.getGeneration();
+            assert(generation > 0);
+            Object revposObj = newAttach.get("revpos");
+            int revpos = generation;
+            if(revposObj != null && revposObj instanceof Integer) {
+                revpos = ((Integer)revposObj).intValue();
+            }
+
+            if(revpos > generation) {
+                return new CBLStatus(CBLStatus.BAD_REQUEST);
+            }
+
+            // Finally insert the attachment:
+            status = insertAttachmentForSequenceWithNameAndType(stream, newSequence, name, newAttach, revpos);
+
             if(!status.isSuccessful()) {
                 return status;
             }
@@ -1626,7 +1673,7 @@ public class CBLDatabase extends Observable {
      * Used by the PUT / DELETE methods called on attachment URLs.
      */
     public CBLRevision updateAttachment(String filename, InputStream contentStream, String contentType, String docID, String oldRevID, CBLStatus status) {
-        status.setCode(CBLStatus.BAD_REQUEST);
+        /*status.setCode(CBLStatus.BAD_REQUEST);
         if(filename == null || filename.length() == 0 || (contentStream != null && contentType == null) || (oldRevID != null && docID == null) || (contentStream != null && docID == null)) {
             return null;
         }
@@ -1697,7 +1744,9 @@ public class CBLDatabase extends Observable {
             return null;
         } finally {
             endTransaction(status.isSuccessful());
-        }
+        }*/
+
+        return null;
     }
 
     /**
